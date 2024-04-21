@@ -20,8 +20,8 @@ To install the necessary Python packages, follow these steps:
 
 1. Clone the repository:
    ```bash
-   git clone https://your-repository-url.git
-   cd your-repository-directory
+   git clone https://github.com/AbdullahAlobaid9/PDF-Extractor
+   cd PDF-Extractor
 
 2. Install the required packages:
     pip install -r requirements.txt
