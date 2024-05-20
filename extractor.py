@@ -1,40 +1,55 @@
-import fitz  # PyMuPDF
 import os
+import re
+from PIL import Image, ImageFilter, ImageEnhance
+from pdf2image import convert_from_path
+import pytesseract
 
-def extract_key_pages_text(pdf_path):
-    """Extract text from the first two and last two pages of a PDF."""
-    doc = fitz.open(pdf_path)
-    num_pages = doc.page_count
-    # Determine pages to extract: first two and last two, avoiding duplicates
-    pages_to_extract = list(range(min(2, num_pages))) + list(range(max(2, num_pages-2), num_pages))
-    pages_to_extract = sorted(set(pages_to_extract))  # Remove duplicates if any
-    text = []
-    
-    for page_num in pages_to_extract:
-        page = doc.load_page(page_num)  # Load the specific page
-        text.append(page.get_text())
-    
-    doc.close()
-    return '\n'.join(text)
 
-def process_pdfs_from_directory(input_directory, output_directory):
-    """Process all PDF files in the input directory, extracting text from key pages."""
-    for filename in os.listdir(input_directory):
-        if filename.lower().endswith('.pdf'):
-            pdf_path = os.path.join(input_directory, filename)
-            output_path = os.path.join(output_directory, os.path.splitext(filename)[0] + '_key_pages.txt')
-            
-            print(f"Processing {filename}...")
-            try:
-                extracted_text = extract_key_pages_text(pdf_path)
-                
-                with open(output_path, 'w', encoding='utf-8') as file:
-                    file.write(extracted_text)
-                print(f"Saved extracted text to {output_path}")
-            except Exception as e:
-                print(f"Failed to process {filename}: {e}")
-                
-if __name__ == "__main__":
-    input_dir = './docs/input/'  # Specify your PDF storage path
-    output_dir = './docs/output/'  # Specify your output path for extracted texts
-    process_pdfs_from_directory(input_dir, output_dir)
+input_directory = 'docs/input/'; 
+output_directory = 'docs/output/'; 
+# Set Tesseract command path
+pytesseract.pytesseract.tesseract_cmd = r'/usr/bin/tesseract'
+
+# Function to preprocess the image
+def preprocess_image(page_image):
+    image = page_image.convert('L')  # Convert to grayscale
+    image = image.filter(ImageFilter.SHARPEN)  # Sharpen image
+    enhancer = ImageEnhance.Contrast(image)
+    image = enhancer.enhance(2)  # Increase contrast
+    return image
+
+# Function to correct common OCR text errors and format properly
+def post_process_text(ocr_text):
+    ocr_text = re.sub(r'\s+', ' ', ocr_text)
+    return ocr_text
+
+# Process a single PDF file
+def process_pdf_file(filePath):
+    # Convert PDF to images with high resolution
+    doc = convert_from_path(filePath, dpi=250)
+
+    # Extract file info
+    fileBaseName = os.path.splitext(os.path.basename(filePath))[0]
+
+    ocr_text_list = []  # To store OCR results for all pages
+
+    # Process each page
+    for page_number, page_data in enumerate(doc):
+        print(f"Processing page {page_number + 1} of {fileBaseName}")
+        image = preprocess_image(page_data)
+        arabic_text = pytesseract.image_to_string(image, lang='ara', config='--psm 6 --oem 3')
+        arabic_text = post_process_text(arabic_text)
+        ocr_text_list.append(arabic_text)
+
+    # Save the extracted OCR text to a text file
+    output_text_path = os.path.join(output_directory, f'{fileBaseName}_Arabic.txt')
+    with open(output_text_path, 'w', encoding='utf-8') as output_text_file:
+        output_text_file.write('\n'.join(ocr_text_list))
+
+    print(f"Arabic text saved at: {output_text_path}")
+
+# Process all PDF files in the input directory
+for filename in os.listdir(input_directory):
+    if filename.lower().endswith('.pdf'):
+        filePath = os.path.join(input_directory, filename)
+        process_pdf_file(filePath)
